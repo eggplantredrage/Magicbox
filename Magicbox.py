@@ -14,17 +14,16 @@ from scipy.fft import rfft
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QListWidget, QFileDialog, QSlider, QHBoxLayout,
-    QMenuBar, QAction, QMessageBox, QDialog, QRadioButton, QButtonGroup, 
-    QLineEdit, QListWidgetItem, QSplitter, QGridLayout, QGroupBox, QComboBox,
-    QInputDialog, QSizePolicy
+    QMenuBar, QAction, QMessageBox, QDialog, 
+    QLineEdit, QListWidgetItem, QSplitter, QInputDialog, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QRect, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QImage, QColor, QPainter, QPalette
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaMetaData
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 
 # --------------------------------------------------------------------------------------
-# NEW/MODIFIED: Sound Monitoring Thread for Visualizer
+# Sound Monitoring Thread for Visualizer
 # --------------------------------------------------------------------------------------
 
 class SoundMonitor(QThread):
@@ -40,7 +39,6 @@ class SoundMonitor(QThread):
         self.fs = fs
         self.blocksize = blocksize
         self.running = False
-        # Allows manual selection of the input device index (for loopback)
         self.input_device_index = input_device_index
 
     def run(self):
@@ -80,7 +78,7 @@ class SoundMonitor(QThread):
         self.wait() 
 
 # --------------------------------------------------------------------------------------
-# NEW: Audio Device Selector Dialog
+# Audio Device Selector Dialog
 # --------------------------------------------------------------------------------------
 
 class AudioDeviceSelectorDialog(QDialog):
@@ -293,7 +291,7 @@ class AboutDialog(QDialog):
             "<b>Magic Box Media Player</b><br>"
             "In Memory of Bruno, our beloved music teacher.<br>"
             "Thank you for inspiring us to keep the music alive.<br><br>"
-            "2025 XIX Technology<br>"
+            "2025 <span style='color:#FFD700;'>Caution Interactive</span><br>"
             "By Eggplant48 (Kevin Leblanc)"
             "<br><br>This Software is licensed under the MIT License."
             "<br><br>Enjoy The Music! 🎵"
@@ -421,7 +419,7 @@ class MagicBoxPlayer(QWidget):
         video_layout = QVBoxLayout(self.video_panel)
         video_layout.setContentsMargins(0, 0, 0, 0)
         
-        # --- NEW: Placeholder Widget (QLabel) ---
+        # --- Placeholder Widget (QLabel) ---
         self.placeholder_label = QLabel()
         # Look for 'placeholder.png' in the same directory as the script
         placeholder_path = os.path.join(os.path.dirname(__file__), 'placeholder.png')
@@ -439,13 +437,12 @@ class MagicBoxPlayer(QWidget):
         self.placeholder_label.setMinimumSize(320, 240)
         self.placeholder_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        video_layout.addWidget(self.placeholder_label) # Add the placeholder FIRST
-        # --- END NEW ---
+        video_layout.addWidget(self.placeholder_label) 
 
         self.video_widget = QVideoWidget()
         self.video_widget.setMinimumSize(320, 240) 
         self.media_player.setVideoOutput(self.video_widget)
-        video_layout.addWidget(self.video_widget) # Add the video widget SECOND
+        video_layout.addWidget(self.video_widget) 
         
         video_status_bar = QHBoxLayout()
         video_status_bar.setContentsMargins(4, 4, 4, 4)
@@ -506,7 +503,7 @@ class MagicBoxPlayer(QWidget):
         # Check if SoundMonitor failed and prompt user for manual selection
         QTimer.singleShot(1000, self.check_visualizer_status)
 
-        # --- NEW: Set initial visibility state ---
+        # --- Set initial visibility state ---
         self.update_video_view_visibility(is_playing=False)
 
 
@@ -547,7 +544,7 @@ class MagicBoxPlayer(QWidget):
                 # 3. Reconnect the visualizer if it's already open
                 if self.visualizer_window and self.visualizer_window.isVisible():
                     # Attempt to disconnect the old signal, but it's hard without knowing prior state.
-                    pass # Keep the connection logic minimal here for stability
+                    pass 
                         
                     self.sound_monitor.fft_data_signal.connect(self.visualizer_window.update_data)
                     
@@ -594,7 +591,7 @@ class MagicBoxPlayer(QWidget):
                                     "The Visualizer is open but the audio monitor is not running. Please use the 'View -> Visualizer Manual Setup' menu to choose a loopback device.")
 
     # --------------------------------------------------------------------------------------
-    # NEW: Video View Management
+    # Video View Management
     # --------------------------------------------------------------------------------------
     def update_video_view_visibility(self, is_playing):
         """Switches between the placeholder and the QVideoWidget."""
@@ -647,7 +644,7 @@ class MagicBoxPlayer(QWidget):
         
         view_menu.addAction(eq_action)
         view_menu.addAction(vis_action)
-        view_menu.addAction(vis_setup_action) # New item for manual fix
+        view_menu.addAction(vis_setup_action) 
         view_menu.addSeparator()
         view_menu.addAction(self.mini_player_action)
 
@@ -683,9 +680,6 @@ class MagicBoxPlayer(QWidget):
         if checked:
             self._original_geometry = self.geometry()
             self.setFixedSize(QSize(360, 320)) 
-            
-            # The video panel widgets are managed by visibility, not size limits in this mode
-            # We keep the video panel layout intact but hide major UI elements.
             
             self.content_splitter.setSizes([0, 1]) 
             self.playlist_panel.hide()
@@ -766,7 +760,7 @@ class MagicBoxPlayer(QWidget):
             self.current_index = idx
             self.song_list.setCurrentRow(self.current_index)
             
-            self.update_video_view_visibility(is_playing=True) # NEW: Update visibility
+            self.update_video_view_visibility(is_playing=True) 
             self.media_player.setMedia(QMediaContent(QUrl(m3u_url)))
             self.media_player.play()
             self.play_button.setText("⏸️")
@@ -784,7 +778,7 @@ class MagicBoxPlayer(QWidget):
             self.song_list.setCurrentRow(self.current_index)
             
             self.media_player.stop() 
-            self.update_video_view_visibility(is_playing=True) # NEW: Update visibility
+            self.update_video_view_visibility(is_playing=True) 
             self.media_player.setMedia(QMediaContent(QUrl(m3u_url)))
             self.media_player.play()
             self.play_button.setText("⏸️")
@@ -834,7 +828,7 @@ class MagicBoxPlayer(QWidget):
             idx = self._add_to_playlist(m3u_url, playlist_name, is_channel=True)
             self.current_index = idx
             self.song_list.setCurrentRow(self.current_index)
-            self.update_video_view_visibility(is_playing=True) # NEW: Update visibility
+            self.update_video_view_visibility(is_playing=True) 
             self.media_player.setMedia(QMediaContent(QUrl(m3u_url)))
             self.media_player.play()
             self.play_button.setText("⏸️")
@@ -853,7 +847,7 @@ class MagicBoxPlayer(QWidget):
         self.song_list.setCurrentRow(self.current_index)
 
         self.media_player.stop() 
-        self.update_video_view_visibility(is_playing=True) # NEW: Update visibility
+        self.update_video_view_visibility(is_playing=True) 
         media_content = QMediaContent(QUrl(url))
         self.media_player.setMedia(media_content)
         self.media_player.play()
@@ -872,7 +866,7 @@ class MagicBoxPlayer(QWidget):
         media_source = self.playlist[self.current_index]
         
         self.media_player.stop() 
-        self.update_video_view_visibility(is_playing=True) # NEW: Update visibility
+        self.update_video_view_visibility(is_playing=True) 
 
         if media_source.startswith('http'):
             if media_source.lower().endswith(('.m3u', '.m3u8')):
@@ -946,12 +940,10 @@ class MagicBoxPlayer(QWidget):
         if state == QMediaPlayer.PlayingState:
             self.play_button.setText("⏸️")
             self.playing = True
-            # NEW: Update visibility to show the video
             self.update_video_view_visibility(is_playing=True)
         elif state == QMediaPlayer.StoppedState:
             self.play_button.setText("▶️")
             self.playing = False
-            # NEW: Update visibility to show the placeholder
             self.update_video_view_visibility(is_playing=False)
         
     def toggle_play_pause(self):
@@ -984,7 +976,6 @@ class MagicBoxPlayer(QWidget):
         self.info_author.setText("Author: (---)")
         self.info_show.setText("Show/Album: (---)")
         self.info_copyright.setText("Copyright: (---)")
-        # NEW: Show placeholder after stopping
         self.update_video_view_visibility(is_playing=False)
 
     def next_song(self):
@@ -1010,10 +1001,8 @@ class MagicBoxPlayer(QWidget):
         if self.media_player.isSeekable():
             self.media_player.setPosition(position * self.media_player.duration() // 1000)
 
-    # --- FIX APPLIED HERE: Using QMediaMetaData.ContributingArtist ---
     def fetch_song_info(self):
         title = self.media_player.metaData(QMediaMetaData.Title) or '---'
-        # The common, stable key for Artist on various backends is ContributingArtist
         artist = self.media_player.metaData(QMediaMetaData.ContributingArtist) or '---' 
         album = self.media_player.metaData(QMediaMetaData.AlbumTitle) or '---'
         copyright_info = self.media_player.metaData(QMediaMetaData.Copyright) or '---'
@@ -1035,10 +1024,8 @@ class MagicBoxPlayer(QWidget):
             
         QMessageBox.information(self, "Media Information", info_text)
 
-    # --- FIX APPLIED HERE: Using QMediaMetaData.ContributingArtist ---
     def find_on_youtube(self):
         title = self.media_player.metaData(QMediaMetaData.Title)
-        # Use the corrected artist key
         artist = self.media_player.metaData(QMediaMetaData.ContributingArtist)
         
         if title:
