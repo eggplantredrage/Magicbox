@@ -3,292 +3,111 @@ import os
 import requests
 import webbrowser
 import shutil
-import random
 import math
-
-# --- Imports for sounddevice and numpy ---
-import numpy as np
-import sounddevice as sd
-from scipy.fft import rfft 
+import warnings
+import urllib3
+import json 
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QListWidget, QFileDialog, QSlider, QHBoxLayout,
     QMenuBar, QAction, QMessageBox, QDialog, 
-    QLineEdit, QListWidgetItem, QSplitter, QInputDialog, QSizePolicy
+    QLineEdit, QListWidgetItem, QSplitter, QInputDialog, QSizePolicy,
+    QCheckBox # ADDED: For sync selection list
 )
-from PyQt5.QtCore import Qt, QUrl, QTimer, QSize, QThread, pyqtSignal
-from PyQt5.QtGui import QIcon, QFont, QPixmap, QImage, QColor, QPainter, QPalette
+from PyQt5.QtCore import Qt, QUrl, QTimer, QSize
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QPainter, QBrush
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaMetaData
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 
 # --------------------------------------------------------------------------------------
-# Sound Monitoring Thread for Visualizer
+# GLOBAL SETUP: Suppress warnings and set resource path
 # --------------------------------------------------------------------------------------
 
-class SoundMonitor(QThread):
+# Suppress the InsecureRequestWarning caused by using verify=False 
+# for M3U/M3U8 playlist downloads from certain public test servers.
+warnings.simplefilter('ignore', urllib3.exceptions.InsecureRequestWarning)
+
+def resource_path(relative_path):
     """
-    Monitors system audio output using sounddevice's loopback feature 
-    (requires OS support like 'Stereo Mix' on Windows) 
-    and emits data for FFT processing.
+    Get the absolute path to a resource, works for dev and for PyInstaller.
     """
-    fft_data_signal = pyqtSignal(np.ndarray)
-    
-    def __init__(self, fs=44100, blocksize=1024, input_device_index=None):
-        super().__init__()
-        self.fs = fs
-        self.blocksize = blocksize
-        self.running = False
-        self.input_device_index = input_device_index
-
-    def run(self):
-        self.running = True
-        try:
-            with sd.InputStream(
-                samplerate=self.fs,
-                channels=2, # Stereo monitoring
-                dtype='float32',
-                blocksize=self.blocksize,
-                device=self.input_device_index 
-            ) as stream:
-                print(f"Sound monitor started on device: {stream.device}")
-                while self.running:
-                    data, overflowed = stream.read(self.blocksize)
-                    if overflowed:
-                        print("Audio buffer overflowed!", file=sys.stderr)
-                    
-                    if data.size > 0:
-                        self.process_fft(data)
-        except Exception as e:
-            # This is the point of failure if loopback is not available
-            print(f"Error starting SoundMonitor (Loopback may not be supported or configured): {e}")
-            self.running = False
-            # Emit an empty array to indicate failure to the visualizer
-            self.fft_data_signal.emit(np.zeros(32)) 
-
-    def process_fft(self, data):
-        """Perform simple FFT on the captured data."""
-        mono_data = data[:, 0]
-        windowed_data = mono_data * np.hanning(len(mono_data))
-        spectrum = np.abs(rfft(windowed_data)) 
-        self.fft_data_signal.emit(spectrum)
-
-    def stop(self):
-        self.running = False
-        self.wait() 
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
 
 # --------------------------------------------------------------------------------------
-# Audio Device Selector Dialog
+# Custom Widget: Fake Visualizer (ANIMATED)
 # --------------------------------------------------------------------------------------
 
-class AudioDeviceSelectorDialog(QDialog):
-    """Allows the user to manually select an input device for the SoundMonitor."""
+class FakeVisualizerWidget(QWidget):
+    """A custom widget that draws an animated pattern resembling a visualizer."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Select Visualizer Input Device")
-        self.setMinimumWidth(400)
-        self.selected_device_index = None
-
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Select the device that captures **system audio output** (e.g., 'Stereo Mix', 'Loopback', or 'What U Hear'):"))
-
-        self.device_list = QListWidget()
-        self.populate_devices()
-        self.device_list.setMinimumHeight(150)
-        self.device_list.itemDoubleClicked.connect(self.accept)
-        layout.addWidget(self.device_list)
+        self.setFixedSize(350, 100)
+        self.setStyleSheet("border: 2px solid #777; background-color: #000;")
         
-        button_box = QHBoxLayout()
-        self.ok_button = QPushButton("Select Device")
-        self.cancel_button = QPushButton("Cancel")
+        self.phase = 0.0
         
-        self.ok_button.clicked.connect(self.accept)
-        self.cancel_button.clicked.connect(self.reject)
+        self.animation_timer = QTimer(self)
+        self.animation_timer.timeout.connect(self.update_visuals)
+        self.animation_timer.start(50) 
+
+    def update_visuals(self):
+        """Update the animation phase and trigger a repaint."""
+        self.phase += 0.1 
+        if self.phase > 2 * math.pi:
+            self.phase -= 2 * math.pi
         
-        button_box.addStretch(1)
-        button_box.addWidget(self.ok_button)
-        button_box.addWidget(self.cancel_button)
-        
-        layout.addLayout(button_box)
-        self.setLayout(layout)
-        
-    def populate_devices(self):
-        self.device_list.clear()
-        
-        try:
-            devices = sd.query_devices()
-            # Only list devices that can act as an input (i.e., loopback potential)
-            input_devices = [d for d in devices if d['max_input_channels'] > 0]
-            
-            for d in input_devices:
-                # Display the device index, name, and host API
-                item = QListWidgetItem(f"[{d['index']}] {d['name']} ({d['hostapi']})")
-                item.setData(Qt.UserRole, d['index'])
-                self.device_list.addItem(item)
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not query audio devices: {e}\n\nPlease ensure your audio drivers are properly installed.")
-            self.reject()
-
-    def accept(self):
-        selected_item = self.device_list.currentItem()
-        if selected_item:
-            self.selected_device_index = selected_item.data(Qt.UserRole)
-            super().accept()
-        else:
-            QMessageBox.warning(self, "Selection Required", "Please select a device from the list.")
-
-    def get_selected_device_index(self):
-        return self.selected_device_index
-
-# --------------------------------------------------------------------------------------
-# Helper/Window Classes (EQWindow, VisualizerWindow, AboutDialog) 
-# --------------------------------------------------------------------------------------
-
-class EQWindow(QWidget):
-    # This class remains a placeholder
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Equalizer (Placeholder)")
-        self.setGeometry(200, 200, 350, 300)
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Equalizer - Requires Custom Audio Engine (SoundDevice)"))
-        self.sliders = []
-        bands = ["Bass", "Low-Mid", "Mid", "High-Mid", "Treble"]
-        for band in bands:
-            band_layout = QHBoxLayout()
-            label = QLabel(band)
-            slider = QSlider(Qt.Horizontal)
-            slider.setRange(-10, 10)
-            slider.setValue(0)
-            slider.valueChanged.connect(lambda value, b=band: print(f"EQ: {b} set to {value} dB"))
-            band_layout.addWidget(label)
-            band_layout.addWidget(slider)
-            layout.addLayout(band_layout)
-            self.sliders.append(slider)
-        reset_btn = QPushButton("Reset")
-        reset_btn.clicked.connect(self.reset_eq)
-        layout.addWidget(reset_btn)
-        self.setLayout(layout)
-
-    def reset_eq(self):
-        for slider in self.sliders:
-            slider.setValue(0)
-
-class SimulatedVisualizerWindow(QWidget):
-    """Visualizer that uses simulated math/random data, safe for About dialog."""
-    def __init__(self):
-        super().__init__()
-        self.n_bars = 32
-        self.phase = 0
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.animate)
-        self.timer.start(30)
-        self.bars = [0] * self.n_bars
-        self.setMinimumSize(200, 50)
-
-    def animate(self):
-        self.phase += 0.15
-        # Simulated audio data for visual effect
-        for i in range(self.n_bars):
-            # Sine wave + random for a more dynamic look
-            base = 60 + 40 * math.sin(self.phase + i * 0.3)
-            jitter = random.randint(-10, 10)
-            self.bars[i] = max(10, min(120, int(base + jitter)))
-        self.update()
+        self.repaint()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        w = self.width() // self.n_bars
-        for i, h in enumerate(self.bars):
-            color = QColor.fromHsv(int(240 - (i * 240 / self.n_bars)), 255, 255)
-            painter.setBrush(color)
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(i * w + 2, self.height() - h, w - 4, h)
-            
-class VisualizerWindow(QWidget):
-    """
-    Data-driven Visualizer, connected to SoundMonitor for real audio data.
-    Used when opened via the View menu.
-    """
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Visualizer")
-        self.setGeometry(250, 250, 400, 200)
-        self.n_bars = 32
-        self.max_height = 120
-        self.bars = np.zeros(self.n_bars)
-        self.decay_factor = 0.8
-        
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_bars)
-        self.timer.start(50) 
-
-    def update_data(self, spectrum):
-        """Receives FFT data from the SoundMonitor thread."""
-        if not spectrum.any():
-            return
-
-        num_spectrum_points = len(spectrum)
-        bar_heights = np.zeros(self.n_bars)
-        
-        log_min = 2.0
-        log_max = num_spectrum_points - 1
-        
-        indices = np.unique(np.logspace(np.log10(log_min), 
-                                        np.log10(log_max), 
-                                        self.n_bars + 1).astype(int))
-        
-        if len(indices) < self.n_bars + 1:
-            return 
-
-        for i in range(self.n_bars):
-            start = indices[i]
-            end = indices[i+1]
-            
-            if end > start:
-                amplitude = np.mean(spectrum[start:end])
-                # Convert amplitude to a dB-like scale for visualization
-                height_db = 20 * np.log10(amplitude + 1e-9) + 80 
-                
-                # Apply smoothing/decay
-                self.bars[i] = max(height_db, self.bars[i] * 0.9) 
-
-    def update_bars(self):
-        """Decays the bars and triggers a repaint."""
-        for i in range(self.n_bars):
-            self.bars[i] = max(0, self.bars[i] * self.decay_factor)
-            
-        self.update() 
-
-    def paintEvent(self, event):
+        """Draws animated colored bars based on the current phase."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        w = self.width() // self.n_bars
-        for i, raw_h in enumerate(self.bars):
-            # Clip height to widget size
-            h = int(np.clip(raw_h * 2.5, 0, self.height() - 20)) 
+        w = self.width()
+        h = self.height()
+        bar_count = 15
+        spacing = 5
+        bar_width = (w - (bar_count + 1) * spacing) / bar_count 
+        
+        colors = [Qt.red, Qt.yellow, Qt.green, Qt.cyan, Qt.blue, Qt.magenta, Qt.white]
+        
+        for i in range(bar_count):
+            bar_height_ratio = abs(math.sin(i * 0.4 + self.phase) * 0.4) + 0.3 
+            bar_height = h * bar_height_ratio
             
-            color = QColor.fromHsv(int(240 - (i * 240 / self.n_bars)), 255, 255)
-            painter.setBrush(color)
+            x = spacing + i * (bar_width + spacing)
+            y = h - bar_height
+            
+            color = colors[i % len(colors)]
             painter.setPen(Qt.NoPen)
-            painter.drawRect(i * w + 2, self.height() - h, w - 4, h)
+            painter.setBrush(QBrush(color))
+            
+            painter.drawRect(int(x), int(y), int(bar_width), int(bar_height))
+            
+        painter.end()
 
+# --------------------------------------------------------------------------------------
+# Helper/Window Class (AboutDialog) 
+# --------------------------------------------------------------------------------------
 
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About Magic Box")
-        self.setFixedSize(420, 350)
-        layout = QVBoxLayout()
-        # --- Using the SIMULATED VISUALIZER for reliability ---
-        self.visualizer = SimulatedVisualizerWindow() 
-        self.visualizer.setFixedHeight(140)
-        layout.addWidget(self.visualizer)
+        self.setWindowTitle("About MagicBoxPlayer")
+        self.setFixedSize(400, 450)
+        
+        main_layout = QVBoxLayout(self)
+        
+        visualizer_widget = FakeVisualizerWidget()
+        main_layout.addWidget(visualizer_widget, alignment=Qt.AlignCenter)
+        
         about_text = QLabel(
-            "<b>Magic Box Media Player</b><br>"
+            "<b>MagicBoxPlayer</b><br>" 
             "In Memory of Bruno, our beloved music teacher.<br>"
             "Thank you for inspiring us to keep the music alive.<br><br>"
             "2025 <span style='color:#FFD700;'>Caution Interactive</span><br>"
@@ -298,9 +117,126 @@ class AboutDialog(QDialog):
         )
         about_text.setWordWrap(True)
         about_text.setAlignment(Qt.AlignCenter)
-        layout.addWidget(about_text)
-        self.setLayout(layout)
+        main_layout.addWidget(about_text)
+        
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.accept)
+        main_layout.addWidget(close_button)
+        
+        self.setLayout(main_layout)
 
+# --------------------------------------------------------------------------------------
+# NEW: Sync Selection Dialog
+# --------------------------------------------------------------------------------------
+
+class SyncSelectionDialog(QDialog):
+    def __init__(self, playlist_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Songs and Device for Sync")
+        self.setGeometry(100, 100, 600, 500)
+        
+        self.playlist_data = playlist_data
+        self.selected_files = []
+        self.destination_folder = None
+
+        main_layout = QVBoxLayout(self)
+
+        # 1. Selection List
+        list_label = QLabel("Select songs from your playlist:")
+        main_layout.addWidget(list_label)
+        
+        self.list_widget = QListWidget()
+        self.list_widget.setSelectionMode(QListWidget.NoSelection)
+        self.populate_list()
+        main_layout.addWidget(self.list_widget)
+
+        # 2. Destination Folder Selector
+        device_layout = QHBoxLayout()
+        self.device_label = QLabel("Device Music Folder:")
+        device_layout.addWidget(self.device_label)
+        
+        self.device_path_line = QLineEdit("Select the device's main Music folder...")
+        self.device_path_line.setReadOnly(True)
+        device_layout.addWidget(self.device_path_line)
+        
+        self.browse_button = QPushButton("Browse...")
+        self.browse_button.clicked.connect(self.select_device_folder)
+        device_layout.addWidget(self.browse_button)
+        main_layout.addLayout(device_layout)
+        
+        # 3. Action Buttons
+        button_box = QHBoxLayout()
+        self.sync_button = QPushButton("Start Sync")
+        self.sync_button.clicked.connect(self.accept_sync)
+        self.sync_button.setEnabled(False) # Disable until a folder is selected
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        
+        button_box.addStretch(1)
+        button_box.addWidget(self.sync_button)
+        button_box.addWidget(cancel_button)
+        main_layout.addLayout(button_box)
+
+    def populate_list(self):
+        """Populate the list with playlist items and checkboxes."""
+        for url in self.playlist_data:
+            # Skip showing streams in the sync list
+            if url.startswith('http'):
+                continue
+                
+            # Use the simple filename for display
+            display_name = os.path.basename(url)
+            
+            item = QListWidgetItem(self.list_widget)
+            
+            # Create a checkbox widget
+            checkbox = QCheckBox(display_name)
+            checkbox.setChecked(False) # Start unchecked
+            
+            # Store the path on the checkbox itself
+            checkbox.setProperty("file_path", url) 
+            
+            # Connect checkbox state change to update sync button status
+            checkbox.stateChanged.connect(self.update_sync_button_status)
+            
+            self.list_widget.addItem(item)
+            self.list_widget.setItemWidget(item, checkbox)
+
+    def select_device_folder(self):
+        """Open a dialog to select the device's music folder."""
+        folder = QFileDialog.getExistingDirectory(
+            self, 
+            "Select Device Music Folder (e.g., ROCKBOX/Music)"
+        )
+        if folder:
+            self.destination_folder = folder
+            self.device_path_line.setText(folder)
+            self.update_sync_button_status()
+
+    def update_sync_button_status(self):
+        """Enable sync button only if songs are selected AND a folder is chosen."""
+        any_checked = any(
+            self.list_widget.itemWidget(self.list_widget.item(i)).isChecked() 
+            for i in range(self.list_widget.count())
+        )
+        self.sync_button.setEnabled(any_checked and bool(self.destination_folder))
+
+    def accept_sync(self):
+        """Collect selected files and accept the dialog."""
+        self.selected_files = []
+        for i in range(self.list_widget.count()):
+            checkbox = self.list_widget.itemWidget(self.list_widget.item(i))
+            if checkbox.isChecked():
+                # Retrieve the path stored on the checkbox
+                self.selected_files.append(checkbox.property("file_path"))
+        
+        if self.selected_files and self.destination_folder:
+            self.accept()
+        else:
+            # This shouldn't happen if update_sync_button_status works, but safety first
+            QMessageBox.warning(self, "Missing Info", "Please select at least one song and the device folder.")
+            
 # --------------------------------------------------------------------------------------
 # CORE PLAYER CLASS
 # --------------------------------------------------------------------------------------
@@ -308,8 +244,10 @@ class AboutDialog(QDialog):
 class MagicBoxPlayer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Magic Box 🎶")
+        self.setWindowTitle("MagicBoxPlayer 🎶") 
         self.setGeometry(100, 100, 750, 550)  
+        
+        self.PLAYLIST_FILE = "saved_playlist.json" 
         
         self._original_geometry = self.geometry()
         self._is_mini_player = False
@@ -318,14 +256,11 @@ class MagicBoxPlayer(QWidget):
         self.current_index = -1 
         self.playing = False
 
+        # --- QMediaPlayer Setup ---
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
         self.media_player.stateChanged.connect(self.on_state_changed)
         self.media_player.error.connect(self.media_error)
         self.media_player.metaDataAvailableChanged.connect(self.fetch_song_info)
-        
-        # --- Sound Monitor Initialization (Attempt auto-start) ---
-        self.sound_monitor = SoundMonitor()
-        self.sound_monitor.start() 
         
         # --- Main Layout (Vertical Stack) ---
         self.main_layout = QVBoxLayout(self)
@@ -385,6 +320,10 @@ class MagicBoxPlayer(QWidget):
         
         self.playback_slider = QSlider(Qt.Horizontal)
         self.playback_slider.setRange(0, 1000)
+        
+        self.media_player.positionChanged.connect(self.on_position_changed)
+        self.media_player.durationChanged.connect(self.on_duration_changed)
+
         self.main_layout.addWidget(self.playback_slider)
 
         # 4. Main Content Area (Horizontal Split: Playlist | Video)
@@ -421,17 +360,7 @@ class MagicBoxPlayer(QWidget):
         
         # --- Placeholder Widget (QLabel) ---
         self.placeholder_label = QLabel()
-        # Look for 'placeholder.png' in the same directory as the script
-        placeholder_path = os.path.join(os.path.dirname(__file__), 'placeholder.png')
-        
-        if os.path.exists(placeholder_path):
-            pixmap = QPixmap(placeholder_path)
-            self.placeholder_label.setPixmap(pixmap)
-            self.placeholder_label.setStyleSheet("background-color: black;")
-        else:
-            self.placeholder_label.setText("MAGIC BOX 🎶\n(No Media Loaded - Add 'placeholder.png' to the script directory)")
-            self.placeholder_label.setStyleSheet("background-color: #333; color: #fff; border: 2px solid #555;")
-            
+        self.setup_placeholder_image() 
         self.placeholder_label.setAlignment(Qt.AlignCenter)
         self.placeholder_label.setScaledContents(True) 
         self.placeholder_label.setMinimumSize(320, 240)
@@ -463,7 +392,7 @@ class MagicBoxPlayer(QWidget):
         
         self.info_clip = QLabel("Clip: (---)")
         self.info_author = QLabel("Author: (---)")
-        self.info_show = QLabel("Show: (---)")
+        self.info_show = QLabel("Show/Album: (---)")
         self.info_copyright = QLabel("Copyright: (---)")
         
         info_layout.addWidget(self.info_clip)
@@ -489,72 +418,85 @@ class MagicBoxPlayer(QWidget):
         self.setLayout(self.main_layout)
         self.connect_signals()
 
-        # Timer for updating playback slider
+        # Load the playlist immediately after setup
+        self.load_playlist() 
+
+        # Timer for updating playback slider (as a fallback/secondary update)
         self.timer = QTimer()
         self.timer.setInterval(500)
         self.timer.timeout.connect(self.update_position)
         self.timer.start()
 
-        self.eq_window = None
-        self.visualizer_window = None
-        
-        QApplication.instance().aboutToQuit.connect(self.sound_monitor.stop)
-        
-        # Check if SoundMonitor failed and prompt user for manual selection
-        QTimer.singleShot(1000, self.check_visualizer_status)
-
         # --- Set initial visibility state ---
         self.update_video_view_visibility(is_playing=False)
 
+        # -------------------------------------------------------------------
+        # PYINSTALLER SPLASH SCREEN CLOSURE HOOK
+        if hasattr(sys, '_MEIPASS'):
+            try:
+                import pyi_splash
+                pyi_splash.close() 
+            except ImportError:
+                pass
+        # -------------------------------------------------------------------
 
-    # --------------------------------------------------------------------------------------
-    # Visualizer Status Check and Device Selector
-    # --------------------------------------------------------------------------------------
+    # --- Override Close Event ---
+    def closeEvent(self, event):
+        """Overrides the standard close event to save the playlist."""
+        self.save_playlist()
+        self.media_player.stop()
+        event.accept() 
 
-    def check_visualizer_status(self):
-        """Checks if the SoundMonitor failed and prompts for manual device selection."""
-        # Use a small delay to allow the SoundMonitor thread to attempt starting and fail
-        if not self.sound_monitor.running and not self.sound_monitor.isFinished():
-            QMessageBox.warning(self, "Visualizer Setup Failed", 
-                "The system audio monitor (Visualizer) failed to start automatically.\n\n"
-                "This usually means the required 'Stereo Mix' or 'Loopback' device is disabled or unavailable.\n\n"
-                "Would you like to manually select an audio input device for the Visualizer?"
-            )
-            # Give the user an option to fix it immediately
-            if QMessageBox.Yes == QMessageBox.question(self, "Manual Setup", 
-                                                        "Select a loopback/stereo mix device now?", 
-                                                        QMessageBox.Yes | QMessageBox.No):
-                self.show_audio_device_selector()
+    # --- Save/Load Playlist Methods ---
+    def save_playlist(self):
+        """Saves the current playlist (list of URLs/paths) to a JSON file."""
+        try:
+            with open(self.PLAYLIST_FILE, 'w') as f:
+                json.dump(self.playlist, f)
+            print("Playlist saved successfully.")
+        except Exception as e:
+            print(f"Warning: Could not save playlist: {e}")
 
-
-    def show_audio_device_selector(self):
-        """Opens the dialog for manual audio input device selection."""
-        selector = AudioDeviceSelectorDialog(self)
-        
-        if selector.exec_() == QDialog.Accepted:
-            selected_index = selector.get_selected_device_index()
-            if selected_index is not None:
-                # 1. Stop the currently running/failed thread
-                self.sound_monitor.stop()
-
-                # 2. Create a new SoundMonitor with the selected index
-                self.sound_monitor = SoundMonitor(input_device_index=selected_index)
-                self.sound_monitor.start()
-                
-                # 3. Reconnect the visualizer if it's already open
-                if self.visualizer_window and self.visualizer_window.isVisible():
-                    # Attempt to disconnect the old signal, but it's hard without knowing prior state.
-                    pass 
-                        
-                    self.sound_monitor.fft_data_signal.connect(self.visualizer_window.update_data)
+    def load_playlist(self):
+        """Loads the playlist from the JSON file on startup."""
+        if os.path.exists(self.PLAYLIST_FILE):
+            try:
+                with open(self.PLAYLIST_FILE, 'r') as f:
+                    loaded_list = json.load(f)
                     
+                self.playlist = []
+                self.song_list.clear()
+
+                for url in loaded_list:
+                    # Re-add items using the internal _add_to_playlist method
+                    name = os.path.basename(url) if not url.startswith('http') else url
+                    is_stream = url.startswith('http') or url.lower().endswith(('.m3u', '.m3u8'))
+                    self._add_to_playlist(url, name, is_channel=is_stream)
                 
-                if not self.sound_monitor.running:
-                    QMessageBox.critical(self, "Monitor Failed", 
-                                         f"Failed to start the monitor with device index {selected_index}. Check permissions or select a different device.")
-                else:
-                     QMessageBox.information(self, "Monitor Fixed", 
-                                         f"Visualizer monitor successfully started on device index {selected_index}.")
+                if self.playlist:
+                    self.current_index = 0
+                    self.song_list.setCurrentRow(0)
+
+                print(f"Playlist loaded with {len(self.playlist)} items.")
+
+            except Exception as e:
+                print(f"Error loading playlist file: {e}")
+                
+    # -------------------------------------
+
+    def setup_placeholder_image(self):
+        """Checks for placeholder.png and sets the label content."""
+        placeholder_path = resource_path('placeholder.png')
+        
+        if os.path.exists(placeholder_path):
+            pixmap = QPixmap(placeholder_path)
+            if not pixmap.isNull():
+                self.placeholder_label.setPixmap(pixmap)
+                self.placeholder_label.setStyleSheet("background-color: black;")
+                return
+
+        self.placeholder_label.setText("MAGIC BOX 🎶\n(No Media Loaded)")
+        self.placeholder_label.setStyleSheet("background-color: #333; color: #fff; border: 2px solid #555;")
 
     # --------------------------------------------------------------------------------------
     # Connect Signals 
@@ -570,25 +512,20 @@ class MagicBoxPlayer(QWidget):
         self.volume_slider.valueChanged.connect(self.media_player.setVolume)
     
     # --------------------------------------------------------------------------------------
-    # Show Window Functions (Revised for Visualizer connection)
+    # Playback Slider/Time Handlers
     # --------------------------------------------------------------------------------------
-
-    def show_eq(self):
-        if self.eq_window is None:
-            self.eq_window = EQWindow()
-        self.eq_window.show()
-
-    def show_visualizer(self):
-        """Opens the Visualizer window and connects the sound monitor."""
-        if self.visualizer_window is None:
-            self.visualizer_window = VisualizerWindow()
-            # Connect the thread's signal to the window's data update slot
-            self.sound_monitor.fft_data_signal.connect(self.visualizer_window.update_data)
-        self.visualizer_window.show()
+    def on_duration_changed(self, duration):
+        """Sets the maximum value of the slider based on media duration (in milliseconds)."""
+        self.playback_slider.setRange(0, duration) 
         
-        if not self.sound_monitor.running:
-            QMessageBox.information(self, "Visualizer Warning", 
-                                    "The Visualizer is open but the audio monitor is not running. Please use the 'View -> Visualizer Manual Setup' menu to choose a loopback device.")
+    def on_position_changed(self, position):
+        """Updates the slider position as the media plays."""
+        if not self.playback_slider.isSliderDown():
+            self.playback_slider.setValue(position)
+
+    def set_position(self, position):
+        """Sets the media player position when the user moves the slider."""
+        self.media_player.setPosition(position)
 
     # --------------------------------------------------------------------------------------
     # Video View Management
@@ -599,18 +536,15 @@ class MagicBoxPlayer(QWidget):
             self.placeholder_label.hide()
             self.video_widget.show()
         else:
-            # Check if the player is truly stopped or has no media before showing the placeholder
             if self.media_player.mediaStatus() == QMediaPlayer.NoMedia or self.media_player.state() == QMediaPlayer.StoppedState:
                 self.video_widget.hide()
                 self.placeholder_label.show()
             else:
-                # Keep video widget visible if it's paused or loading
                 self.placeholder_label.hide()
                 self.video_widget.show()
 
-
     # --------------------------------------------------------------------------------------
-    # Remaining Functions 
+    # Core Player Functions 
     # --------------------------------------------------------------------------------------
 
     def setup_menu_bar(self, menu_bar):
@@ -630,22 +564,9 @@ class MagicBoxPlayer(QWidget):
         file_menu.addAction(exit_action)
         
         view_menu = menu_bar.addMenu("View")
-        eq_action = QAction("Equalizer", self)
-        eq_action.triggered.connect(self.show_eq)
-        vis_action = QAction("Visualizer", self)
-        vis_action.triggered.connect(self.show_visualizer)
-        
-        vis_setup_action = QAction("Visualizer Manual Setup", self)
-        vis_setup_action.triggered.connect(self.show_audio_device_selector)
-        
         self.mini_player_action = QAction("Mini Player Mode", self)
         self.mini_player_action.setCheckable(True)
         self.mini_player_action.triggered.connect(self.toggle_mini_player)
-        
-        view_menu.addAction(eq_action)
-        view_menu.addAction(vis_action)
-        view_menu.addAction(vis_setup_action) 
-        view_menu.addSeparator()
         view_menu.addAction(self.mini_player_action)
 
         play_menu = menu_bar.addMenu("Play")
@@ -662,14 +583,17 @@ class MagicBoxPlayer(QWidget):
         info_action.triggered.connect(self.show_song_info)
         youtube_action = QAction("Find on YouTube", self)
         youtube_action.triggered.connect(self.find_on_youtube)
-        copy_action = QAction("Copy to Device/Folder...", self)
-        copy_action.triggered.connect(self.copy_to_device)
+        
+        # UPDATED: Sync to Device Action
+        copy_action = QAction("Sync Media to Device...", self) 
+        copy_action.triggered.connect(self.sync_to_device)
+        
         tools_menu.addAction(info_action)
         tools_menu.addAction(youtube_action)
         tools_menu.addAction(copy_action)
         
         help_menu = menu_bar.addMenu("Help")
-        about_action = QAction("About MagicBox", self)
+        about_action = QAction("About MagicBoxPlayer", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
@@ -683,7 +607,6 @@ class MagicBoxPlayer(QWidget):
             
             self.content_splitter.setSizes([0, 1]) 
             self.playlist_panel.hide()
-            
             self.menu_bar.hide()
             self.location_label.hide() 
             self.info_panel.hide()
@@ -702,7 +625,6 @@ class MagicBoxPlayer(QWidget):
             
             self.full_ui_button.hide()
             
-            # Reset scaling/sizing related to the video area
             self.video_widget.setMinimumSize(320, 240)
             self.video_widget.setMaximumSize(16777215, 16777215) 
             self.video_panel.setMaximumSize(16777215, 16777215)
@@ -745,7 +667,8 @@ class MagicBoxPlayer(QWidget):
 
     def _parse_and_load_m3u(self, m3u_url, playlist_name):
         try:
-            response = requests.get(m3u_url, timeout=10)
+            # FIX: Use verify=False to bypass SSL hostname mismatch errors for public streams
+            response = requests.get(m3u_url, timeout=10, verify=False)
             response.raise_for_status()
             content = response.text
         except requests.exceptions.RequestException as e:
@@ -769,7 +692,7 @@ class MagicBoxPlayer(QWidget):
             self.fetch_song_info()
             return idx 
 
-        is_hls_stream = any(line.startswith('#EXT-X-TARGETDURATION') or line.startswith('#EXT-X-MEDIA-SEQUENCE') for line in lines)
+        is_hls_stream = any(line.startswith('#EXT-X-TARGETDURATION') for line in lines)
         is_multi_channel = any('#EXTINF' in line and (',' in line and len(line.split(',')[-1].strip()) > 0) for line in lines)
 
         if is_hls_stream and not is_multi_channel:
@@ -839,9 +762,11 @@ class MagicBoxPlayer(QWidget):
         
     def play_media_url(self, url, name=None):
         if url.lower().endswith(('.m3u', '.m3u8')):
-            self._parse_and_load_m3u(url, name if name else os.path.basename(url))
-            return 
-        
+            if '://' in url and not any(ext in url.lower() for ext in ['.ts', '.mp4']):
+                 parse_result = self._parse_and_load_m3u(url, name if name else os.path.basename(url))
+                 if parse_result != -1:
+                     return
+            
         index = self._add_to_playlist(url, name, is_channel=True)
         self.current_index = index
         self.song_list.setCurrentRow(self.current_index)
@@ -869,28 +794,16 @@ class MagicBoxPlayer(QWidget):
         self.update_video_view_visibility(is_playing=True) 
 
         if media_source.startswith('http'):
-            if media_source.lower().endswith(('.m3u', '.m3u8')):
-                is_channel_link = self.song_list.item(self.current_index).data(Qt.UserRole) == 'stream_channel'
-                
-                if not is_channel_link:
-                    self._parse_and_load_m3u(media_source, item.text() if item else os.path.basename(media_source))
-                    return 
-                
             self.media_player.setMedia(QMediaContent(QUrl(media_source)))
-            self.media_player.play()
-            self.play_button.setText("⏸️")
-            self.playing = True
-            self.song_list.setCurrentRow(self.current_index)
-            self.update_location_bar()
-            self.fetch_song_info()
         else:
             self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(media_source)))
-            self.media_player.play()
-            self.play_button.setText("⏸️")
-            self.playing = True
-            self.song_list.setCurrentRow(self.current_index)
-            self.update_location_bar()
-            self.fetch_song_info()
+            
+        self.media_player.play()
+        self.play_button.setText("⏸️")
+        self.playing = True
+        self.song_list.setCurrentRow(self.current_index)
+        self.update_location_bar()
+        self.fetch_song_info()
             
     def load_songs(self):
         files, _ = QFileDialog.getOpenFileNames(
@@ -899,11 +812,7 @@ class MagicBoxPlayer(QWidget):
         )
         if files:
             for file in files:
-                if file.lower().endswith(('.m3u', '.m3u8')):
-                    QMessageBox.information(self, "Feature Note", "Local M3U/M3U8 files are only added as a single entry for now. Please use the 'Stream/IPTV' menu item for public IPTV URLs.")
-                    if file not in self.playlist:
-                         self._add_to_playlist(file, os.path.basename(file), is_channel=False)
-                elif file not in self.playlist:
+                if file not in self.playlist:
                     self._add_to_playlist(file, os.path.basename(file), is_channel=False)
             
             if self.media_player.state() == QMediaPlayer.StoppedState and not self.playing and self.playlist:
@@ -955,14 +864,9 @@ class MagicBoxPlayer(QWidget):
         elif current_state == QMediaPlayer.StoppedState or current_state == QMediaPlayer.NoMedia:
             if self.playlist:
                 if self.current_index == -1:
-                    # If stopped and no index is set, assume the user wants to play the first song
                     self.current_index = 0
                 
-                # If no media is loaded, force the selection and play routine
-                if self.media_player.mediaStatus() == QMediaPlayer.NoMedia:
-                    self.play_selected_song()
-                else:
-                    self.media_player.play()
+                self.play_selected_song() 
             else:
                 QMessageBox.warning(self, "Cannot Play", "Please add media to the playlist first.")
         
@@ -994,23 +898,20 @@ class MagicBoxPlayer(QWidget):
         self.mute_button.setText("🔊" if is_muted else "🔇")
 
     def update_position(self):
-        if self.media_player.isSeekable() and self.media_player.state() != QMediaPlayer.StoppedState:
-            self.playback_slider.setValue(self.media_player.position() * 1000 // self.media_player.duration())
-
-    def set_position(self, position):
-        if self.media_player.isSeekable():
-            self.media_player.setPosition(position * self.media_player.duration() // 1000)
+        if self.media_player.isSeekable() and self.media_player.duration() > 0:
+            if not self.playback_slider.isSliderDown():
+                self.playback_slider.setValue(self.media_player.position())
 
     def fetch_song_info(self):
-        title = self.media_player.metaData(QMediaMetaData.Title) or '---'
-        artist = self.media_player.metaData(QMediaMetaData.ContributingArtist) or '---' 
-        album = self.media_player.metaData(QMediaMetaData.AlbumTitle) or '---'
-        copyright_info = self.media_player.metaData(QMediaMetaData.Copyright) or '---'
+        title = self.media_player.metaData(QMediaMetaData.Title)
+        artist = self.media_player.metaData(QMediaMetaData.ContributingArtist) 
+        album = self.media_player.metaData(QMediaMetaData.AlbumTitle) 
+        copyright_info = self.media_player.metaData(QMediaMetaData.Copyright)
 
-        self.info_clip.setText(f"Clip: ({title})")
-        self.info_author.setText(f"Author: ({artist})")
-        self.info_show.setText(f"Show/Album: ({album})")
-        self.info_copyright.setText(f"Copyright: ({copyright_info})")
+        self.info_clip.setText(f"Clip: ({title or '---'})")
+        self.info_author.setText(f"Author: ({artist or '---'})")
+        self.info_show.setText(f"Show/Album: ({album or '---'})")
+        self.info_copyright.setText(f"Copyright: ({copyright_info or '---'})")
 
     def show_song_info(self):
         info_text = ""
@@ -1034,57 +935,73 @@ class MagicBoxPlayer(QWidget):
         else:
             QMessageBox.warning(self, "Search Error", "No title metadata available to search.")
 
-    def copy_to_device(self):
-        if self.current_index == -1 or not self.playlist:
-            QMessageBox.warning(self, "Copy Error", "No media is currently loaded or selected.")
+    # UPDATED: Sync to Device function to open selection dialog
+    def sync_to_device(self):
+        """
+        Opens the selection dialog and executes the file copy for selected files.
+        """
+        if not self.playlist:
+            QMessageBox.warning(self, "Sync Error", "The playlist is empty. Please add media first.")
             return
 
-        source_path = self.playlist[self.current_index]
+        # 1. Open the selection dialog
+        dialog = SyncSelectionDialog(self.playlist, self)
         
-        if source_path.startswith('http'):
-            QMessageBox.warning(self, "Copy Error", "Cannot copy media from a live stream URL.")
-            return
+        if dialog.exec_() == QDialog.Accepted:
+            selected_files = dialog.selected_files
+            destination_folder = dialog.destination_folder
             
-        destination_folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder/Device")
-        
-        if destination_folder:
-            try:
-                shutil.copy(source_path, destination_folder)
-                QMessageBox.information(self, "Copy Complete", f"Successfully copied '{os.path.basename(source_path)}' to:\n{destination_folder}")
-            except Exception as e:
-                QMessageBox.critical(self, "Copy Failed", f"An error occurred during copying:\n{e}")
+            if not selected_files or not destination_folder:
+                return
 
+            files_synced = 0
+            files_skipped = 0
+            
+            # 2. Loop through selected files and sync
+            for source_path in selected_files:
+                # Streams are filtered in the dialog's populate_list, but check here too
+                if source_path.startswith('http'):
+                    files_skipped += 1
+                    continue
+                
+                try:
+                    base_name = os.path.basename(source_path)
+                    final_destination = os.path.join(destination_folder, base_name)
+                    
+                    # Ensure the copy operation is successful
+                    shutil.copy(source_path, final_destination)
+                    files_synced += 1
+                except Exception as e:
+                    QMessageBox.critical(self, "Sync Failed", f"Failed to copy '{base_name}':\n{e}")
+                    files_skipped += 1
+
+            # 3. Report results
+            if files_synced > 0:
+                QMessageBox.information(
+                    self, 
+                    "Sync Complete", 
+                    f"Successfully synced {files_synced} file(s) to the device.\n"
+                    f"(Skipped {files_skipped} file(s) - e.g., streams or errors).\n\n"
+                    "NOTE: For classic iPod/Zune, a dedicated tool (like Rockbox Utility) may be required to update the internal music database."
+                )
+            elif files_skipped > 0 and files_synced == 0:
+                 QMessageBox.warning(
+                    self, 
+                    "Sync Canceled", 
+                    f"No files were synced. {files_skipped} file(s) were skipped due to being streams or copy errors."
+                )
+        
     def show_about(self):
         about_dialog = AboutDialog(self)
         about_dialog.exec_()
 
-    def closeEvent(self, event):
-        self.sound_monitor.stop()
-        if self.eq_window: self.eq_window.close()
-        if self.visualizer_window: self.visualizer_window.close()
-        super().closeEvent(event)
-
-# --------------------------------------------------------------------------------------
-# EXECUTION BLOCK
-# --------------------------------------------------------------------------------------
-
 if __name__ == '__main__':
+    if hasattr(sys, 'frozen') and sys.platform == 'win32':
+        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    
     app = QApplication(sys.argv)
     
-    try:
-        import numpy as np
-        import sounddevice as sd
-    except ImportError:
-        QMessageBox.critical(None, "Dependency Error", 
-                             "Required libraries 'numpy' and 'python-sounddevice' are missing.\n"
-                             "Please install them: pip install numpy python-sounddevice scipy")
-        sys.exit(1)
-        
-    try:
-        # Check if any audio devices are available at all
-        sd.query_devices() 
-    except Exception:
-        print("No audio device found or host API setup failed. Visualizer will not work.")
+    app.setApplicationName("MagicBoxPlayer")
 
     player = MagicBoxPlayer()
     player.show()
