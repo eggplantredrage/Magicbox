@@ -8,7 +8,6 @@ import warnings
 import urllib3
 import json
 import numpy as np
-
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QListWidget, QFileDialog, QSlider, QHBoxLayout,
@@ -20,25 +19,21 @@ from PyQt5.QtCore import Qt, QUrl, QTimer, QSize
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QPainter, QBrush
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaMetaData
 from PyQt5.QtMultimediaWidgets import QVideoWidget
-
 # OpenGL
 from OpenGL.GL import *
 from OpenGL.GLU import *
-
 # --------------------------------------------------------------------------------------
 # GLOBAL SETUP
 # --------------------------------------------------------------------------------------
 warnings.simplefilter('ignore', urllib3.exceptions.InsecureRequestWarning)
-
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
-
 # --------------------------------------------------------------------------------------
-# Fake Visualizer (2D)
+# Fake Visualizer (2D) — KEPT for About Dialog
 # --------------------------------------------------------------------------------------
 class FakeVisualizerWidget(QWidget):
     def __init__(self, parent=None):
@@ -49,13 +44,11 @@ class FakeVisualizerWidget(QWidget):
         self.animation_timer = QTimer(self)
         self.animation_timer.timeout.connect(self.update_visuals)
         self.animation_timer.start(50) 
-
     def update_visuals(self):
         self.phase += 0.1 
         if self.phase > 2 * math.pi:
             self.phase -= 2 * math.pi
         self.repaint()
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -75,7 +68,6 @@ class FakeVisualizerWidget(QWidget):
             painter.setBrush(QBrush(color))
             painter.drawRect(int(x), int(y), int(bar_width), int(bar_height))
         painter.end()
-
 # --------------------------------------------------------------------------------------
 # 3D Cube Visualizer
 # --------------------------------------------------------------------------------------
@@ -89,24 +81,20 @@ class CubeVisualizer(QOpenGLWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
         self.timer.start(40)
-
     def initializeGL(self):
         glClearColor(0.0, 0.0, 0.0, 1.0)
         glEnable(GL_DEPTH_TEST)
-
     def resizeGL(self, w, h):
         glViewport(0, 0, w, h)
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         gluPerspective(45, w / h if h else 1, 0.1, 50.0)
         glMatrixMode(GL_MODELVIEW)
-
     def paintGL(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         glTranslatef(0.0, 0.0, -5.0)
         glRotatef(self.rotation, 1.0, 1.0, 0.0)
-
         if self.media_player:
             pos = self.media_player.position()
             dur = self.media_player.duration()
@@ -117,11 +105,9 @@ class CubeVisualizer(QOpenGLWidget):
                 self.intensity = 0.0
         else:
             self.intensity = (np.sin(self.rotation * 0.1) * 0.5 + 0.5)
-
         r = 0.5 + 0.5 * np.sin(self.intensity * 3.0)
         g = 0.5 + 0.5 * np.sin(self.intensity * 3.0 + 2.0)
         b = 0.5 + 0.5 * np.sin(self.intensity * 3.0 + 4.0)
-
         glBegin(GL_QUADS)
         glColor3f(r, g, b); glVertex3f(-1, -1, 1); glVertex3f(1, -1, 1); glVertex3f(1, 1, 1); glVertex3f(-1, 1, 1)
         glColor3f(b, r, g); glVertex3f(-1, -1, -1); glVertex3f(-1, 1, -1); glVertex3f(1, 1, -1); glVertex3f(1, -1, -1)
@@ -130,13 +116,11 @@ class CubeVisualizer(QOpenGLWidget):
         glColor3f(b, g, r); glVertex3f(1, -1, -1); glVertex3f(1, 1, -1); glVertex3f(1, 1, 1); glVertex3f(1, -1, 1)
         glColor3f(g, r, b); glVertex3f(-1, -1, -1); glVertex3f(-1, -1, 1); glVertex3f(-1, 1, 1); glVertex3f(-1, 1, -1)
         glEnd()
-
     def animate(self):
         self.rotation += 1.0
         if self.rotation > 360:
             self.rotation -= 360
         self.update()
-
 # --------------------------------------------------------------------------------------
 # Orbiting Bars Visualizer
 # --------------------------------------------------------------------------------------
@@ -150,24 +134,20 @@ class OrbitingBarsVisualizer(QOpenGLWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
         self.timer.start(40)
-
     def initializeGL(self):
         glClearColor(0.0, 0.0, 0.0, 1.0)
         glEnable(GL_DEPTH_TEST)
-
     def resizeGL(self, w, h):
         glViewport(0, 0, w, h)
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         gluPerspective(45, w / h if h else 1, 0.1, 50.0)
         glMatrixMode(GL_MODELVIEW)
-
     def paintGL(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         glTranslatef(0.0, 0.0, -5.0)
         glRotatef(self.rotation, 0, 1, 0)
-
         if self.media_player:
             pos = self.media_player.position()
             dur = self.media_player.duration()
@@ -178,7 +158,6 @@ class OrbitingBarsVisualizer(QOpenGLWidget):
                 self.intensity = 0.0
         else:
             self.intensity = (np.sin(self.rotation * 0.1) * 0.5 + 0.5)
-
         # Central cube
         r = 0.5 + 0.5 * np.sin(self.intensity * 2.0)
         g = 0.5 + 0.5 * np.sin(self.intensity * 2.0 + 2.0)
@@ -191,7 +170,6 @@ class OrbitingBarsVisualizer(QOpenGLWidget):
         glColor3f(b, g, r); glVertex3f(0.8, -0.8, -0.8); glVertex3f(0.8, 0.8, -0.8); glVertex3f(0.8, 0.8, 0.8); glVertex3f(0.8, -0.8, 0.8)
         glColor3f(g, r, b); glVertex3f(-0.8, -0.8, -0.8); glVertex3f(-0.8, -0.8, 0.8); glVertex3f(-0.8, 0.8, 0.8); glVertex3f(-0.8, 0.8, -0.8)
         glEnd()
-
         # Orbiting bars
         num_bars = 8
         for i in range(num_bars):
@@ -225,15 +203,13 @@ class OrbitingBarsVisualizer(QOpenGLWidget):
             glVertex3f(0.1, -height/2, -0.1)
             glEnd()
             glPopMatrix()
-
     def animate(self):
         self.rotation += 1.0
         if self.rotation > 360:
             self.rotation -= 360
         self.update()
-
 # --------------------------------------------------------------------------------------
-# About Dialog
+# About Dialog — STILL USES FakeVisualizerWidget
 # --------------------------------------------------------------------------------------
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
@@ -259,86 +235,6 @@ class AboutDialog(QDialog):
         close_button.clicked.connect(self.accept)
         main_layout.addWidget(close_button)
         self.setLayout(main_layout)
-
-# --------------------------------------------------------------------------------------
-# Sync Selection Dialog
-# --------------------------------------------------------------------------------------
-class SyncSelectionDialog(QDialog):
-    def __init__(self, playlist_data, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Select Songs and Device for Sync")
-        self.setGeometry(100, 100, 600, 500)
-        self.playlist_data = playlist_data
-        self.selected_files = []
-        self.destination_folder = None
-        main_layout = QVBoxLayout(self)
-        list_label = QLabel("Select songs from your playlist:")
-        main_layout.addWidget(list_label)
-        self.list_widget = QListWidget()
-        self.list_widget.setSelectionMode(QListWidget.NoSelection)
-        self.populate_list()
-        main_layout.addWidget(self.list_widget)
-        device_layout = QHBoxLayout()
-        self.device_label = QLabel("Device Music Folder:")
-        device_layout.addWidget(self.device_label)
-        self.device_path_line = QLineEdit("Select the device's main Music folder...")
-        self.device_path_line.setReadOnly(True)
-        device_layout.addWidget(self.device_path_line)
-        self.browse_button = QPushButton("Browse...")
-        self.browse_button.clicked.connect(self.select_device_folder)
-        device_layout.addWidget(self.browse_button)
-        main_layout.addLayout(device_layout)
-        button_box = QHBoxLayout()
-        self.sync_button = QPushButton("Start Sync")
-        self.sync_button.clicked.connect(self.accept_sync)
-        self.sync_button.setEnabled(False)
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-        button_box.addStretch(1)
-        button_box.addWidget(self.sync_button)
-        button_box.addWidget(cancel_button)
-        main_layout.addLayout(button_box)
-
-    def populate_list(self):
-        for url in self.playlist:
-            if url.startswith('http'):
-                continue
-            display_name = os.path.basename(url)
-            item = QListWidgetItem(self.list_widget)
-            checkbox = QCheckBox(display_name)
-            checkbox.setChecked(False)
-            checkbox.setProperty("file_path", url)
-            checkbox.stateChanged.connect(self.update_sync_button_status)
-            self.list_widget.addItem(item)
-            self.list_widget.setItemWidget(item, checkbox)
-
-    def select_device_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self, "Select Device Music Folder (e.g., ROCKBOX/Music)"
-        )
-        if folder:
-            self.destination_folder = folder
-            self.device_path_line.setText(folder)
-            self.update_sync_button_status()
-
-    def update_sync_button_status(self):
-        any_checked = any(
-            self.list_widget.itemWidget(self.list_widget.item(i)).isChecked() 
-            for i in range(self.list_widget.count())
-        )
-        self.sync_button.setEnabled(any_checked and bool(self.destination_folder))
-
-    def accept_sync(self):
-        self.selected_files = []
-        for i in range(self.list_widget.count()):
-            checkbox = self.list_widget.itemWidget(self.list_widget.item(i))
-            if checkbox.isChecked():
-                self.selected_files.append(checkbox.property("file_path"))
-        if self.selected_files and self.destination_folder:
-            self.accept()
-        else:
-            QMessageBox.warning(self, "Missing Info", "Please select at least one song and the device folder.")
-
 # --------------------------------------------------------------------------------------
 # CORE PLAYER CLASS
 # --------------------------------------------------------------------------------------
@@ -356,21 +252,17 @@ class MagicBoxPlayer(QWidget):
         self.current_index = -1 
         self.playing = False
         self.visualizer_3d = None
-        self.visualizer_mode = "none"  # "none", "overlay", "cube", "orbit"
-
+        self.visualizer_mode = "none"  # only "none", "cube", "orbit"
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
         self.media_player.stateChanged.connect(self.on_state_changed)
         self.media_player.error.connect(self.media_error)
         self.media_player.metaDataAvailableChanged.connect(self.fetch_song_info) 
-
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setSpacing(0)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
-
         self.menu_bar = QMenuBar(self)
         self.setup_menu_bar(self.menu_bar)
         self.main_layout.setMenuBar(self.menu_bar)
-
         top_controls_layout = QHBoxLayout()
         top_controls_layout.setContentsMargins(0, 0, 0, 0)
         top_controls_layout.setSpacing(2)
@@ -384,20 +276,17 @@ class MagicBoxPlayer(QWidget):
             btn.setFixedSize(button_size)
             btn.setFont(QFont("Arial", 8))
             top_controls_layout.addWidget(btn)
-
         self.fullscreen_button = QPushButton("📺")
         self.fullscreen_button.setToolTip("Toggle Fullscreen (F11)")
         self.fullscreen_button.setFixedSize(button_size)
         self.fullscreen_button.setFont(QFont("Arial", 8))
         self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
         top_controls_layout.addWidget(self.fullscreen_button)
-
         self.volume_slider = QSlider(Qt.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(100)
         self.volume_slider.setMaximumWidth(120)
         top_controls_layout.addWidget(self.volume_slider)
-
         self.full_ui_button = QPushButton("Full UI")
         self.full_ui_button.setFixedSize(QSize(60, 28))
         self.full_ui_button.setFont(QFont("Arial", 8))
@@ -406,9 +295,7 @@ class MagicBoxPlayer(QWidget):
         top_controls_layout.addWidget(self.full_ui_button)
         top_controls_layout.addStretch(1) 
         self.main_layout.addLayout(top_controls_layout)
-
         self.location_seek_layout = QHBoxLayout()
-        self.location_seek_layout.setContentsMargins(0, 0, 0, 0)
         self.location_label = QLabel("Location:")
         self.location_seek_layout.addWidget(self.location_label)
         self.location_bar = QLineEdit()
@@ -416,15 +303,12 @@ class MagicBoxPlayer(QWidget):
         self.location_bar.setReadOnly(True) 
         self.location_seek_layout.addWidget(self.location_bar)
         self.main_layout.addLayout(self.location_seek_layout)
-
         self.playback_slider = QSlider(Qt.Horizontal)
         self.playback_slider.setRange(0, 1000)
         self.media_player.positionChanged.connect(self.on_position_changed)
         self.media_player.durationChanged.connect(self.on_duration_changed)
         self.main_layout.addWidget(self.playback_slider)
-
         self.content_splitter = QSplitter(Qt.Horizontal)
-
         self.playlist_panel = QWidget()
         playlist_layout = QVBoxLayout(self.playlist_panel)
         playlist_layout.setContentsMargins(0, 0, 0, 0)
@@ -443,7 +327,6 @@ class MagicBoxPlayer(QWidget):
         utility_layout.addWidget(scan_folder_btn)
         playlist_layout.addLayout(utility_layout)
         self.content_splitter.addWidget(self.playlist_panel)
-
         self.video_panel = QWidget()
         video_layout = QVBoxLayout(self.video_panel)
         video_layout.setContentsMargins(0, 0, 0, 0)
@@ -454,7 +337,6 @@ class MagicBoxPlayer(QWidget):
         self.placeholder_label.setMinimumSize(320, 240)
         self.placeholder_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         video_layout.addWidget(self.placeholder_label) 
-
         self.video_widget = QVideoWidget()
         self.video_widget.setMinimumSize(320, 240) 
         self.media_player.setVideoOutput(self.video_widget)
@@ -467,22 +349,11 @@ class MagicBoxPlayer(QWidget):
         self.content_splitter.addWidget(self.video_panel)
         self.content_splitter.setSizes([200, 550]) 
         self.main_layout.addWidget(self.content_splitter, 1) 
-
-        # === Visualizer Overlay (for 2D mode) ===
-        self.visualizer_overlay = FakeVisualizerWidget(self.video_panel)
-        self.visualizer_overlay.hide()
-        self.visualizer_overlay.move(
-            (self.video_panel.width() - self.visualizer_overlay.width()) // 2,
-            (self.video_panel.height() - self.visualizer_overlay.height()) // 2
-        )
-        self.visualizer_overlay.raise_()
-
         # === 3D Visualizer Container ===
         self.visualizer_3d_container = QWidget()
         self.visualizer_3d_layout = QHBoxLayout(self.visualizer_3d_container)
         self.visualizer_3d_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.addWidget(self.visualizer_3d_container)
-
         self.info_panel = QWidget()
         self.info_panel.setStyleSheet("background-color: black; color: white; padding: 2px;")
         info_layout = QHBoxLayout(self.info_panel)
@@ -506,33 +377,20 @@ class MagicBoxPlayer(QWidget):
         info_layout.addWidget(fetch_info_btn)
         info_layout.addWidget(info_btn)
         self.main_layout.addWidget(self.info_panel)
-
         self.setLayout(self.main_layout)
         self.connect_signals()
         self.load_playlist() 
-
         self.timer = QTimer()
         self.timer.setInterval(500)
         self.timer.timeout.connect(self.update_position)
         self.timer.start()
-
         self.update_video_view_visibility(is_playing=False)
-
         if hasattr(sys, '_MEIPASS'):
             try:
                 import pyi_splash
                 pyi_splash.close() 
             except ImportError:
                 pass
-
-    def resizeEvent(self, event):
-        if hasattr(self, 'visualizer_overlay') and not self.visualizer_overlay.isHidden():
-            self.visualizer_overlay.move(
-                (self.video_panel.width() - self.visualizer_overlay.width()) // 2,
-                (self.video_panel.height() - self.visualizer_overlay.height()) // 2
-            )
-        super().resizeEvent(event)
-
     def set_visualizer_mode(self, mode):
         # Hide 3D container
         if self.visualizer_3d:
@@ -540,15 +398,7 @@ class MagicBoxPlayer(QWidget):
             self.visualizer_3d.deleteLater()
             self.visualizer_3d = None
         self.visualizer_3d_container.hide()
-
-        # Handle overlay
-        if mode == "overlay":
-            self.visualizer_overlay.show()
-            self.visualizer_overlay.raise_()
-        else:
-            self.visualizer_overlay.hide()
-
-        # Handle 3D modes
+        # Handle 3D modes only
         if mode == "cube":
             self.visualizer_3d = CubeVisualizer(media_player=self.media_player, parent=self)
             self.visualizer_3d_layout.addWidget(self.visualizer_3d)
@@ -557,21 +407,17 @@ class MagicBoxPlayer(QWidget):
             self.visualizer_3d = OrbitingBarsVisualizer(media_player=self.media_player, parent=self)
             self.visualizer_3d_layout.addWidget(self.visualizer_3d)
             self.visualizer_3d_container.show()
-
         self.visualizer_mode = mode
-
     def closeEvent(self, event):
         if self._is_fullscreen:
             self.toggle_fullscreen()
         self.save_playlist()
         self.media_player.stop()
         event.accept() 
-
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_F11:
             self.toggle_fullscreen()
         super().keyPressEvent(event)
-
     def save_playlist(self):
         try:
             with open(self.PLAYLIST_FILE, 'w') as f:
@@ -579,7 +425,6 @@ class MagicBoxPlayer(QWidget):
             print("Playlist saved successfully.")
         except Exception as e:
             print(f"Warning: Could not save playlist: {e}")
-
     def load_playlist(self):
         if os.path.exists(self.PLAYLIST_FILE):
             try:
@@ -597,7 +442,6 @@ class MagicBoxPlayer(QWidget):
                 print(f"Playlist loaded with {len(self.playlist)} items.")
             except Exception as e:
                 print(f"Error loading playlist file: {e}")
-
     def setup_placeholder_image(self):
         placeholder_path = resource_path('placeholder.png')
         if os.path.exists(placeholder_path):
@@ -608,7 +452,6 @@ class MagicBoxPlayer(QWidget):
                 return
         self.placeholder_label.setText("MAGIC BOX 🎶\n(No Media Loaded)")
         self.placeholder_label.setStyleSheet("background-color: #333; color: #fff; border: 2px solid #555;")
-
     def connect_signals(self):
         self.play_button.clicked.connect(self.toggle_play_pause)
         self.stop_button.clicked.connect(self.stop_song)
@@ -618,17 +461,13 @@ class MagicBoxPlayer(QWidget):
         self.song_list.itemDoubleClicked.connect(self.play_selected_song)
         self.playback_slider.sliderMoved.connect(self.set_position)
         self.volume_slider.valueChanged.connect(self.media_player.setVolume)
-
     def on_duration_changed(self, duration):
         self.playback_slider.setRange(0, duration) 
-
     def on_position_changed(self, position):
         if not self.playback_slider.isSliderDown():
             self.playback_slider.setValue(position)
-
     def set_position(self, position):
         self.media_player.setPosition(position)
-
     def update_video_view_visibility(self, is_playing):
         if is_playing:
             self.placeholder_label.hide()
@@ -640,7 +479,6 @@ class MagicBoxPlayer(QWidget):
             else:
                 self.placeholder_label.hide()
                 self.video_widget.show()
-
     def setup_menu_bar(self, menu_bar):
         file_menu = menu_bar.addMenu("File")
         open_action = QAction("Open Media...", self)
@@ -656,24 +494,20 @@ class MagicBoxPlayer(QWidget):
         file_menu.addAction(scan_action)
         file_menu.addSeparator()
         file_menu.addAction(exit_action)
-
         view_menu = menu_bar.addMenu("View")
         self.mini_player_action = QAction("Mini Player Mode", self)
         self.mini_player_action.setCheckable(True)
         self.mini_player_action.triggered.connect(self.toggle_mini_player)
         view_menu.addAction(self.mini_player_action)
-
         self.fullscreen_action = QAction("Toggle Fullscreen", self)
         self.fullscreen_action.setShortcut("F11")
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
         view_menu.addAction(self.fullscreen_action)
-
-        # === Unified Visualizer Menu ===
+        # === Visualizer Menu — NO 2D OVERLAY ===
         visualizer_menu = view_menu.addMenu("Visualizer")
         vis_group = QActionGroup(self)
         modes = [
             ("None", "none"),
-            ("2D Bars (Overlay)", "overlay"),
             ("3D Color Cube", "cube"),
             ("3D Orbiting Bars", "orbit")
         ]
@@ -684,16 +518,13 @@ class MagicBoxPlayer(QWidget):
             visualizer_menu.addAction(action)
             if mode == "none":
                 action.setChecked(True)
-
         play_menu = menu_bar.addMenu("Play")
         play_menu.addAction("Play/Pause").triggered.connect(self.toggle_play_pause)
         play_menu.addAction("Stop").triggered.connect(self.stop_song)
         play_menu.addAction("Next").triggered.connect(self.next_song)
         play_menu.addAction("Previous").triggered.connect(self.prev_song)
-
         stream_menu = menu_bar.addAction("Stream/IPTV")
         stream_menu.triggered.connect(self.show_stream_dialog)
-
         tools_menu = menu_bar.addMenu("Tools")
         info_action = QAction("Song Info...", self)
         info_action.triggered.connect(self.show_song_info)
@@ -704,12 +535,10 @@ class MagicBoxPlayer(QWidget):
         tools_menu.addAction(info_action)
         tools_menu.addAction(youtube_action)
         tools_menu.addAction(copy_action)
-
         help_menu = menu_bar.addMenu("Help")
         about_action = QAction("About MagicBoxPlayer", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
-
     def toggle_fullscreen(self):
         if self._is_mini_player:
             QMessageBox.warning(self, "Mode Conflict", "Please exit Mini Player Mode before entering Fullscreen.")
@@ -739,7 +568,6 @@ class MagicBoxPlayer(QWidget):
             self.showFullScreen()
             self.fullscreen_action.setChecked(True)
             self._is_fullscreen = True
-
     def toggle_mini_player(self, checked):
         if self._is_fullscreen and checked:
             QMessageBox.warning(self, "Mode Conflict", "Please exit Fullscreen Mode (F11) before entering Mini Player.")
@@ -769,12 +597,10 @@ class MagicBoxPlayer(QWidget):
             self.video_widget.setMaximumSize(16777215, 16777215) 
             self.video_panel.setMaximumSize(16777215, 16777215)
             self.video_panel.setMinimumSize(0, 0)
-
     def media_error(self, error):
         error_name = self.media_player.errorString()
         QMessageBox.critical(self, "Media Error", f"Failed to play media: {error_name}\nCheck URL or file path.")
         self.stop_song()
-
     def update_location_bar(self):
         if self.current_index != -1 and self.playlist:
             song_path = self.playlist[self.current_index]
@@ -790,7 +616,6 @@ class MagicBoxPlayer(QWidget):
                 self.location_bar.setText(os.path.basename(song_path))
         else:
             self.location_bar.setText("")
-
     def _add_to_playlist(self, url, name=None, is_channel=False):
         if url not in self.playlist:
             self.playlist.append(url)
@@ -800,7 +625,6 @@ class MagicBoxPlayer(QWidget):
             self.song_list.addItem(item)
             return len(self.playlist) - 1
         return self.playlist.index(url)
-
     def _parse_and_load_m3u(self, m3u_url, playlist_name):
         try:
             response = requests.get(m3u_url, timeout=10, verify=False)
@@ -818,7 +642,6 @@ class MagicBoxPlayer(QWidget):
             self.update_video_view_visibility(is_playing=True) 
             self.play_media_url(m3u_url, name=playlist_name, is_channel=True, skip_add=True)
             return idx 
-
         is_hls_stream = any(line.startswith('#EXT-X-TARGETDURATION') for line in lines)
         is_multi_channel = any('#EXTINF' in line and (',' in line and len(line.split(',')[-1].strip()) > 0) for line in lines)
         if is_hls_stream and not is_multi_channel:
@@ -829,7 +652,6 @@ class MagicBoxPlayer(QWidget):
             self.update_video_view_visibility(is_playing=True) 
             self.play_media_url(m3u_url, name=playlist_name, is_channel=True, skip_add=True)
             return idx 
-
         channels_added = 0
         last_info = None
         first_index = -1
@@ -866,7 +688,6 @@ class MagicBoxPlayer(QWidget):
             self.update_video_view_visibility(is_playing=True) 
             self.play_media_url(m3u_url, name=playlist_name, is_channel=True, skip_add=True)
             return idx 
-
     def play_media_url(self, url, name=None, is_channel=False, skip_add=False):
         if url.startswith('http') or is_channel:
             media_url = QUrl(url)
@@ -889,7 +710,6 @@ class MagicBoxPlayer(QWidget):
             self.fetch_song_info()
             return True
         return False
-
     def load_songs(self):
         files, _ = QFileDialog.getOpenFileNames(
             self, "Open Media File(s)", "", 
@@ -902,7 +722,6 @@ class MagicBoxPlayer(QWidget):
                 self.current_index = 0
                 self.song_list.setCurrentRow(0)
                 self.play_selected_song()
-
     def scan_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder to Scan")
         if folder:
@@ -914,7 +733,6 @@ class MagicBoxPlayer(QWidget):
                 self.current_index = 0
                 self.song_list.setCurrentRow(0)
                 self.play_selected_song()
-
     def show_stream_dialog(self):
         url, ok = QInputDialog.getText(self, "Open Stream/IPTV URL", "Enter URL (e.g., http://stream.m3u8):")
         if ok and url:
@@ -925,7 +743,6 @@ class MagicBoxPlayer(QWidget):
                     self._parse_and_load_m3u(url, name)
                 else:
                     self.play_media_url(url, name=name, is_channel=True)
-
     def toggle_play_pause(self):
         if not self.playlist: return
         if self.playing:
@@ -940,31 +757,29 @@ class MagicBoxPlayer(QWidget):
             else:
                 self.current_index = 0
                 self.play_selected_song()
-
     def stop_song(self):
         self.media_player.stop()
         self.playing = False
         self.play_button.setText("▶️")
         self.update_video_view_visibility(is_playing=False)
         self.update_location_bar()
-
+        # Prevent accidental EndOfMedia signal after stop
+        self.media_player.blockSignals(True)
+        self.media_player.blockSignals(False)
     def next_song(self):
         if not self.playlist: return
         self.current_index = (self.current_index + 1) % len(self.playlist)
         self.song_list.setCurrentRow(self.current_index)
         self.play_selected_song()
-
     def prev_song(self):
         if not self.playlist: return
         self.current_index = (self.current_index - 1 + len(self.playlist)) % len(self.playlist)
         self.song_list.setCurrentRow(self.current_index)
         self.play_selected_song()
-
     def toggle_mute(self):
         is_muted = self.media_player.isMuted()
         self.media_player.setMuted(not is_muted)
         self.mute_button.setText("🔊" if is_muted else "🔇")
-
     def play_selected_song(self, item=None):
         if item is None:
             item = self.song_list.currentItem()
@@ -973,15 +788,26 @@ class MagicBoxPlayer(QWidget):
         self.current_index = self.song_list.row(item)
         url = self.playlist[self.current_index]
         self.play_media_url(url, name=item.text(), is_channel=item.data(Qt.UserRole) == 'stream_channel')
-
+    
+    # ✅ PATCHED on_state_changed: Only advance on EndOfMedia (not StoppedState)
     def on_state_changed(self, state):
-        if state == QMediaPlayer.StoppedState:
+        if state == QMediaPlayer.EndOfMedia:
             if self.playing:
-                self.next_song()
+                self.playing = False
+                self.play_button.setText("▶️")
+                # Small delay avoids race condition during media reset
+                QTimer.singleShot(100, self.next_song)
+        elif state == QMediaPlayer.PlayingState:
+            self.playing = True
+            self.play_button.setText("⏸️")
+            self.update_video_view_visibility(is_playing=True)
+        elif state == QMediaPlayer.PausedState:
+            self.playing = False
+            self.play_button.setText("▶️")
+        # StoppedState is now ignored for auto-advance
 
     def update_position(self):
         self.on_position_changed(self.media_player.position())
-
     def fetch_song_info(self):
         if not self.media_player.isMetaDataAvailable():
             self.info_clip.setText("Clip: (Loading...)")
@@ -1003,7 +829,6 @@ class MagicBoxPlayer(QWidget):
         self.info_author.setText(f"Author: {author}")
         self.info_show.setText(f"Show/Album: {album}")
         self.info_copyright.setText(f"Copyright: {copyright_info}")
-
     def show_song_info(self):
         if not self.media_player.isMetaDataAvailable():
             QMessageBox.information(self, "Current Media Info", "No Metadata available.")
@@ -1027,40 +852,37 @@ class MagicBoxPlayer(QWidget):
             except Exception:
                 continue 
         QMessageBox.information(self, "Current Media Info", "\n".join(info_lines) if info_lines else "No Metadata available.")
-
     def find_on_youtube(self):
         title = self.media_player.metaData(QMediaMetaData.Title)
         if title:
             webbrowser.open(f"https://www.youtube.com/results?search_query={title}")
         else:
             QMessageBox.warning(self, "Search Error", "No media title available to search.")
-
+    # ✅ NEW: Launch external sync.py
     def sync_to_device(self):
-        if not self.playlist:
-            QMessageBox.warning(self, "Sync Failed", "Playlist is empty.")
+        import subprocess
+        sync_script = resource_path("sync.py")
+        if not os.path.exists(sync_script):
+            QMessageBox.critical(
+                self,
+                "Sync Script Missing",
+                f"The sync script 'sync.py' was not found at:\n{sync_script}"
+            )
             return
-        dialog = SyncSelectionDialog(self.playlist, self)
-        if dialog.exec_() == QDialog.Accepted:
-            selected_files = dialog.selected_files
-            destination = dialog.destination_folder
-            if not os.path.exists(destination):
-                QMessageBox.critical(self, "Sync Error", f"Destination folder does not exist: {destination}")
-                return
-            try:
-                copied_count = 0
-                for source_path in selected_files:
-                    filename = os.path.basename(source_path)
-                    dest_path = os.path.join(destination, filename)
-                    shutil.copy2(source_path, dest_path)
-                    copied_count += 1
-                QMessageBox.information(self, "Sync Complete", f"Successfully synced {copied_count} files to {destination}.")
-            except Exception as e:
-                QMessageBox.critical(self, "Sync Error", f"An error occurred during copying: {e}")
-
+        try:
+            if sys.platform.startswith("win"):
+                subprocess.Popen([sys.executable, sync_script])
+            else:
+                subprocess.Popen([sys.executable, sync_script])
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Sync Launch Failed",
+                f"Failed to launch sync.py:\n{str(e)}"
+            )
     def show_about(self):
         dialog = AboutDialog(self)
         dialog.exec_()
-
 # --------------------------------------------------------------------------------------
 if __name__ == "__main__":
     app = QApplication(sys.argv)
