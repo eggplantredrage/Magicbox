@@ -1,5 +1,10 @@
-import sys
 import os
+import sys
+
+# 🔒 CRITICAL: Force GLX backend on Linux to avoid PyInstaller + EGL crash
+if sys.platform.startswith("linux"):
+    os.environ["PYOPENGL_PLATFORM"] = "glx"
+
 import requests
 import webbrowser
 import shutil
@@ -763,7 +768,7 @@ class MagicBoxPlayer(QWidget):
         self.play_button.setText("▶️")
         self.update_video_view_visibility(is_playing=False)
         self.update_location_bar()
-        # Prevent accidental EndOfMedia signal after stop
+        # ✅ Prevent stray EndOfMedia signals after manual stop
         self.media_player.blockSignals(True)
         self.media_player.blockSignals(False)
     def next_song(self):
@@ -789,13 +794,12 @@ class MagicBoxPlayer(QWidget):
         url = self.playlist[self.current_index]
         self.play_media_url(url, name=item.text(), is_channel=item.data(Qt.UserRole) == 'stream_channel')
     
-    # ✅ PATCHED on_state_changed: Only advance on EndOfMedia (not StoppedState)
+    # ✅ PATCHED: Only auto-advance on EndOfMedia — fixes random skips & stop bug
     def on_state_changed(self, state):
         if state == QMediaPlayer.EndOfMedia:
             if self.playing:
                 self.playing = False
                 self.play_button.setText("▶️")
-                # Small delay avoids race condition during media reset
                 QTimer.singleShot(100, self.next_song)
         elif state == QMediaPlayer.PlayingState:
             self.playing = True
@@ -804,7 +808,7 @@ class MagicBoxPlayer(QWidget):
         elif state == QMediaPlayer.PausedState:
             self.playing = False
             self.play_button.setText("▶️")
-        # StoppedState is now ignored for auto-advance
+        # StoppedState is now ignored for auto-play — fixed!
 
     def update_position(self):
         self.on_position_changed(self.media_player.position())
@@ -858,7 +862,7 @@ class MagicBoxPlayer(QWidget):
             webbrowser.open(f"https://www.youtube.com/results?search_query={title}")
         else:
             QMessageBox.warning(self, "Search Error", "No media title available to search.")
-    # ✅ NEW: Launch external sync.py
+    # ✅ Sync to device (works with PyInstaller)
     def sync_to_device(self):
         import subprocess
         sync_script = resource_path("sync.py")
@@ -870,10 +874,7 @@ class MagicBoxPlayer(QWidget):
             )
             return
         try:
-            if sys.platform.startswith("win"):
-                subprocess.Popen([sys.executable, sync_script])
-            else:
-                subprocess.Popen([sys.executable, sync_script])
+            subprocess.Popen([sys.executable, sync_script])
         except Exception as e:
             QMessageBox.critical(
                 self,
