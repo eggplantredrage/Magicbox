@@ -1,10 +1,9 @@
+
 import os
 import sys
-
 # 🔒 CRITICAL: Force GLX backend on Linux to avoid PyInstaller + EGL crash
 if sys.platform.startswith("linux"):
     os.environ["PYOPENGL_PLATFORM"] = "glx"
-
 import requests
 import webbrowser
 import shutil
@@ -455,7 +454,8 @@ class MagicBoxPlayer(QWidget):
                 self.placeholder_label.setPixmap(pixmap)
                 self.placeholder_label.setStyleSheet("background-color: black;")
                 return
-        self.placeholder_label.setText("MAGIC BOX 🎶\n(No Media Loaded)")
+        self.placeholder_label.setText("""MAGIC BOX 🎶
+(No Media Loaded)""")
         self.placeholder_label.setStyleSheet("background-color: #333; color: #fff; border: 2px solid #555;")
     def connect_signals(self):
         self.play_button.clicked.connect(self.toggle_play_pause)
@@ -535,11 +535,10 @@ class MagicBoxPlayer(QWidget):
         info_action.triggered.connect(self.show_song_info)
         youtube_action = QAction("Find on YouTube", self)
         youtube_action.triggered.connect(self.find_on_youtube)
-        copy_action = QAction("Sync Media to Device...", self) 
-        copy_action.triggered.connect(self.sync_to_device)
+        # Removed sync action
         tools_menu.addAction(info_action)
         tools_menu.addAction(youtube_action)
-        tools_menu.addAction(copy_action)
+        # Removed sync action
         help_menu = menu_bar.addMenu("Help")
         about_action = QAction("About MagicBoxPlayer", self)
         about_action.triggered.connect(self.show_about)
@@ -604,7 +603,8 @@ class MagicBoxPlayer(QWidget):
             self.video_panel.setMinimumSize(0, 0)
     def media_error(self, error):
         error_name = self.media_player.errorString()
-        QMessageBox.critical(self, "Media Error", f"Failed to play media: {error_name}\nCheck URL or file path.")
+        QMessageBox.critical(self, "Media Error", f"""Failed to play media: {error_name}
+Check URL or file path.""")
         self.stop_song()
     def update_location_bar(self):
         if self.current_index != -1 and self.playlist:
@@ -636,11 +636,12 @@ class MagicBoxPlayer(QWidget):
             response.raise_for_status()
             content = response.text
         except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "Network Error", f"Failed to download M3U/M3U8 playlist:\n{e}")
+            QMessageBox.critical(self, "Network Error", f"""Failed to download M3U/M3U8 playlist:
+{e}""")
             return -1 
         lines = content.splitlines()
         if not content.startswith('#EXTM3U'):
-            QMessageBox.warning(self, "Parse Warning", f"File does not look like a standard M3U/M3U8 playlist: {playlist_name}. Trying to play the URL directly.")
+            QMessageBox.warning(self, "Parse Warning", f"""File does not look like a standard M3U/M3U8 playlist: {playlist_name}. Trying to play the URL directly.""")
             idx = self._add_to_playlist(m3u_url, playlist_name, is_channel=True)
             self.current_index = idx
             self.song_list.setCurrentRow(self.current_index)
@@ -680,13 +681,13 @@ class MagicBoxPlayer(QWidget):
                 channels_added += 1
                 last_info = None
         if channels_added > 0:
-            QMessageBox.information(self, "Playlist Loaded", f"Successfully loaded {channels_added} channels from {playlist_name}.")
+            QMessageBox.information(self, "Playlist Loaded", f"""Successfully loaded {channels_added} channels from {playlist_name}.""")
             self.current_index = first_index
             self.song_list.setCurrentRow(self.current_index)
             self.play_selected_song()
             return first_index
         else:
-            QMessageBox.warning(self, "Playlist Warning", f"Could not find any *parsable* channels in {playlist_name}. Attempting to play the playlist URL directly.")
+            QMessageBox.warning(self, "Playlist Warning", f"""Could not find any *parsable* channels in {playlist_name}. Attempting to play the playlist URL directly.""")
             idx = self._add_to_playlist(m3u_url, playlist_name, is_channel=True)
             self.current_index = idx
             self.song_list.setCurrentRow(self.current_index)
@@ -793,7 +794,6 @@ class MagicBoxPlayer(QWidget):
         self.current_index = self.song_list.row(item)
         url = self.playlist[self.current_index]
         self.play_media_url(url, name=item.text(), is_channel=item.data(Qt.UserRole) == 'stream_channel')
-    
     # ✅ PATCHED: Only auto-advance on EndOfMedia — fixes random skips & stop bug
     def on_state_changed(self, state):
         if state == QMediaPlayer.EndOfMedia:
@@ -809,7 +809,6 @@ class MagicBoxPlayer(QWidget):
             self.playing = False
             self.play_button.setText("▶️")
         # StoppedState is now ignored for auto-play — fixed!
-
     def update_position(self):
         self.on_position_changed(self.media_player.position())
     def fetch_song_info(self):
@@ -862,25 +861,7 @@ class MagicBoxPlayer(QWidget):
             webbrowser.open(f"https://www.youtube.com/results?search_query={title}")
         else:
             QMessageBox.warning(self, "Search Error", "No media title available to search.")
-    # ✅ Sync to device (works with PyInstaller)
-    def sync_to_device(self):
-        import subprocess
-        sync_script = resource_path("sync.py")
-        if not os.path.exists(sync_script):
-            QMessageBox.critical(
-                self,
-                "Sync Script Missing",
-                f"The sync script 'sync.py' was not found at:\n{sync_script}"
-            )
-            return
-        try:
-            subprocess.Popen([sys.executable, sync_script])
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Sync Launch Failed",
-                f"Failed to launch sync.py:\n{str(e)}"
-            )
+    # Removed the sync_to_device method
     def show_about(self):
         dialog = AboutDialog(self)
         dialog.exec_()
