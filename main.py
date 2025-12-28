@@ -71,7 +71,7 @@ class AboutDialog(QDialog):
         self.setLayout(main_layout)
 
 # --------------------------------------------------------------------------------------
-# CORE PLAYER — VERSION 4.0 (FINAL CLEAN RELEASE)
+# CORE PLAYER — VERSION 6.0 (PURE FULLSCREEN + CLEAN MUTE)
 # --------------------------------------------------------------------------------------
 class MagicBoxPlayer(QWidget):
     def __init__(self):
@@ -86,11 +86,6 @@ class MagicBoxPlayer(QWidget):
         self.current_index = -1
         self.playing = False
         self._stored_volume = 100
-        self._fullscreen_ui_visible = False
-        self._hide_ui_timer = QTimer()
-        self._hide_ui_timer.setInterval(3000)
-        self._hide_ui_timer.setSingleShot(True)
-        self._hide_ui_timer.timeout.connect(self._hide_fullscreen_ui)
 
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
         self.media_player.stateChanged.connect(self.on_state_changed)
@@ -282,54 +277,6 @@ class MagicBoxPlayer(QWidget):
         info_layout.addWidget(info_btn)
         self.main_layout.addWidget(self.info_panel)
 
-        # === FULLSCREEN OVERLAY UI ===
-        self.fullscreen_overlay = QWidget(self)
-        self.fullscreen_overlay.setGeometry(self.rect())
-        self.fullscreen_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 180);")
-        self.fullscreen_overlay.hide()
-
-        overlay_layout = QHBoxLayout(self.fullscreen_overlay)
-        overlay_layout.setContentsMargins(20, 20, 20, 20)
-
-        fs_playback_layout = QHBoxLayout()
-        self.fs_prev_btn = QPushButton("⏮️")
-        self.fs_play_btn = QPushButton("⏸️")
-        self.fs_next_btn = QPushButton("⏭️")
-        self.fs_stop_btn = QPushButton("⏹️")
-        for btn in [self.fs_prev_btn, self.fs_play_btn, self.fs_next_btn, self.fs_stop_btn]:
-            btn.setFixedSize(40, 40)
-            btn.setStyleSheet("font-size: 18px; color: white;")
-        fs_playback_layout.addWidget(self.fs_prev_btn)
-        fs_playback_layout.addWidget(self.fs_play_btn)
-        fs_playback_layout.addWidget(self.fs_next_btn)
-        fs_playback_layout.addWidget(self.fs_stop_btn)
-        overlay_layout.addLayout(fs_playback_layout)
-        overlay_layout.addStretch()
-
-        fs_right_layout = QHBoxLayout()
-        self.fs_volume_slider = QSlider(Qt.Horizontal)
-        self.fs_volume_slider.setRange(0, 100)
-        self.fs_volume_slider.setValue(100)
-        self.fs_volume_slider.setFixedWidth(120)
-        self.fs_mute_btn = QPushButton("🔇")
-        self.fs_mute_btn.setFixedSize(40, 40)
-        self.fs_mute_btn.setStyleSheet("font-size: 18px; color: white;")
-        self.fs_exit_btn = QPushButton("❌")
-        self.fs_exit_btn.setFixedSize(40, 40)
-        self.fs_exit_btn.setStyleSheet("font-size: 18px; color: white;")
-        fs_right_layout.addWidget(self.fs_mute_btn)
-        fs_right_layout.addWidget(self.fs_volume_slider)
-        fs_right_layout.addWidget(self.fs_exit_btn)
-        overlay_layout.addLayout(fs_right_layout)
-
-        self.fs_play_btn.clicked.connect(self.toggle_play_pause)
-        self.fs_stop_btn.clicked.connect(self.stop_song)
-        self.fs_prev_btn.clicked.connect(self.prev_song)
-        self.fs_next_btn.clicked.connect(self.next_song)
-        self.fs_mute_btn.clicked.connect(self.toggle_mute)
-        self.fs_volume_slider.valueChanged.connect(self.media_player.setVolume)
-        self.fs_exit_btn.clicked.connect(self.toggle_fullscreen)
-
         self.setLayout(self.main_layout)
         self.connect_signals()
         self.load_playlist()
@@ -340,7 +287,7 @@ class MagicBoxPlayer(QWidget):
         self.update_video_view_visibility(is_playing=False)
 
     # ======================================================================================
-    # FINAL: SILENT MUTE + FULLSCREEN
+    # PURE FULLSCREEN + SILENT MUTE
     # ======================================================================================
     def _on_volume_slider_changed(self, value):
         self.media_player.setVolume(value)
@@ -358,13 +305,9 @@ class MagicBoxPlayer(QWidget):
                 if 'MUTED' in vol_info:
                     subprocess.run(['wpctl', 'set-mute', '@DEFAULT_AUDIO_SINK@', '0'], timeout=1)
                     self.mute_button.setText("🔇")
-                    if hasattr(self, 'fs_mute_btn'):
-                        self.fs_mute_btn.setText("🔇")
                 else:
                     subprocess.run(['wpctl', 'set-mute', '@DEFAULT_AUDIO_SINK@', '1'], timeout=1)
                     self.mute_button.setText("🔊")
-                    if hasattr(self, 'fs_mute_btn'):
-                        self.fs_mute_btn.setText("🔊")
                 return
         except Exception:
             pass
@@ -377,13 +320,9 @@ class MagicBoxPlayer(QWidget):
                 if muted == "Mute: yes":
                     subprocess.run(['pactl', 'set-sink-mute', sink, '0'], timeout=1)
                     self.mute_button.setText("🔇")
-                    if hasattr(self, 'fs_mute_btn'):
-                        self.fs_mute_btn.setText("🔇")
                 else:
                     subprocess.run(['pactl', 'set-sink-mute', sink, '1'], timeout=1)
                     self.mute_button.setText("🔊")
-                    if hasattr(self, 'fs_mute_btn'):
-                        self.fs_mute_btn.setText("🔊")
                 return
         except Exception:
             pass
@@ -392,26 +331,12 @@ class MagicBoxPlayer(QWidget):
         if self.media_player.volume() == 0:
             self.media_player.setVolume(100)
             self.mute_button.setText("🔇")
-            if hasattr(self, 'fs_mute_btn'):
-                self.fs_mute_btn.setText("🔇")
         else:
             self.media_player.setVolume(0)
             self.mute_button.setText("🔊")
-            if hasattr(self, 'fs_mute_btn'):
-                self.fs_mute_btn.setText("🔊")
-
-    def _hide_fullscreen_ui(self):
-        if self._is_fullscreen:
-            self.fullscreen_overlay.hide()
-            self._fullscreen_ui_visible = False
-
-    def _show_fullscreen_ui(self):
-        if self._is_fullscreen:
-            self.fullscreen_overlay.show()
-            self._fullscreen_ui_visible = True
-            self._hide_ui_timer.start()
 
     def toggle_fullscreen(self):
+        """✅ TRUE FULLSCREEN: No UI — just media filling entire screen."""
         if self._is_mini_player:
             QMessageBox.warning(self, "Mode Conflict", "Please exit Mini Player Mode before entering Fullscreen.")
             return
@@ -424,17 +349,22 @@ class MagicBoxPlayer(QWidget):
             self.info_panel.hide()
             self.location_label.hide()
             self.location_bar.hide()
+            
+            # Remove video widget from layout and reparent to main window
+            layout = self.video_frame.layout()
+            if layout:
+                layout.removeWidget(self.video_widget)
             self.video_widget.setParent(self)
-            self.video_widget.setGeometry(self.rect())
             self.video_widget.raise_()
             self.video_widget.show()
             self.placeholder_label.hide()
+            
             self.showFullScreen()
             self._is_fullscreen = True
             self.fullscreen_action.setChecked(True)
-            self._show_fullscreen_ui()
-            self.setMouseTracking(True)
-            self.video_widget.setMouseTracking(True)
+            
+            # Ensure it fills the screen after fullscreen is active
+            QTimer.singleShot(50, lambda: self.video_widget.setGeometry(self.rect()))
         else:
             self.showNormal()
             self.setGeometry(self._original_geometry)
@@ -444,23 +374,26 @@ class MagicBoxPlayer(QWidget):
             self.info_panel.show()
             self.location_label.show()
             self.location_bar.show()
+            
+            # Reparent video widget back
             video_frame_layout = self.video_frame.layout()
             if video_frame_layout:
                 video_frame_layout.addWidget(self.video_widget)
+            
             self._is_fullscreen = False
             self.fullscreen_action.setChecked(False)
-            self.fullscreen_overlay.hide()
-            self.setMouseTracking(False)
-            self.video_widget.setMouseTracking(False)
             self.update_video_view_visibility(is_playing=self.media_player.state() == QMediaPlayer.PlayingState)
 
-    def mouseMoveEvent(self, event):
+    def resizeEvent(self, event):
+        """Keep video full-size in fullscreen."""
         if self._is_fullscreen:
-            self._show_fullscreen_ui()
-        super().mouseMoveEvent(event)
+            self.video_widget.setGeometry(self.rect())
+        super().resizeEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_F11:
+            self.toggle_fullscreen()
+        elif event.key() == Qt.Key_Escape and self._is_fullscreen:
             self.toggle_fullscreen()
         else:
             super().keyPressEvent(event)
@@ -476,7 +409,7 @@ class MagicBoxPlayer(QWidget):
         self.volume_slider.valueChanged.connect(self._on_volume_slider_changed)
 
     # ======================================================================================
-    # SYNC, DOWNLOAD, AND OTHER FEATURES (UNCHANGED)
+    # SYNC, DOWNLOAD, AND OTHER FEATURES
     # ======================================================================================
     def _list_all_mounted_drives(self):
         candidates = []
@@ -719,7 +652,7 @@ class MagicBoxPlayer(QWidget):
         Thread(target=do_download, daemon=True).start()
 
     # ======================================================================================
-    # ALL OTHER METHODS (NO CHANGES NEEDED)
+    # ALL OTHER METHODS (NO CHANGES)
     # ======================================================================================
     def closeEvent(self, event):
         if self._is_fullscreen:
@@ -1031,11 +964,9 @@ class MagicBoxPlayer(QWidget):
             self.media_player.pause()
             self.play_button.setText("▶️")
             self.playing = False
-            self.fs_play_btn.setText("▶️")
         else:
             if self.media_player.state() == QMediaPlayer.PausedState:
                 self.media_player.play()
-                self.fs_play_btn.setText("⏸️")
             elif self.current_index != -1:
                 self.play_selected_song()
             else:
@@ -1046,7 +977,6 @@ class MagicBoxPlayer(QWidget):
         self.media_player.stop()
         self.playing = False
         self.play_button.setText("▶️")
-        self.fs_play_btn.setText("▶️")
         self.update_video_view_visibility(is_playing=False)
         self.update_location_bar()
 
@@ -1078,17 +1008,14 @@ class MagicBoxPlayer(QWidget):
             if self.playing:
                 self.playing = False
                 self.play_button.setText("▶️")
-                self.fs_play_btn.setText("▶️")
                 QTimer.singleShot(100, self.next_song)
         elif state == QMediaPlayer.PlayingState:
             self.playing = True
             self.play_button.setText("⏸️")
-            self.fs_play_btn.setText("⏸️")
             self.update_video_view_visibility(is_playing=True)
         elif state == QMediaPlayer.PausedState:
             self.playing = False
             self.play_button.setText("▶️")
-            self.fs_play_btn.setText("▶️")
 
     def update_position(self):
         self.on_position_changed(self.media_player.position())
